@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Akuntansi</title>
+<script src="xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f2f5f8;--cd:#fff;--tx:#14213d;--mu:#5d6b82;--ac:#1f6f5c;--on:#fff;--ln:#dde3ea;--hd:#14213d;--rd:#b42318}
+@media(prefers-color-scheme:dark){:root{--bg:#10151d;--cd:#19202b;--tx:#e6ebf2;--mu:#98a4b8;--ac:#4cc3a4;--on:#06201a;--ln:#2a3342;--hd:#19202b;--rd:#f97066}}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--tx);padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+header{background:var(--hd);color:#fff;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px}
+header small{opacity:.7;display:block}
+#nama{width:100%;background:transparent;border:0;border-bottom:1px solid #ffffff55;color:#fff;font-size:18px;font-weight:600;padding:4px 0}
+main{padding:12px;max-width:720px;margin:auto}
+.card{background:var(--cd);border:1px solid var(--ln);border-radius:10px;padding:12px;margin-bottom:10px}
+h3{margin:0 0 6px;font-size:16px}
+label{display:block;margin:8px 0;font-size:13px;color:var(--mu)}
+input,select{width:100%;padding:10px;margin-top:3px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--tx);font-size:15px}
+.btn{background:var(--ac);color:var(--on);border:0;border-radius:8px;padding:10px 16px;font-size:15px;font-weight:600;margin-top:6px}
+.del{background:none;border:0;color:var(--rd);padding:4px 0;margin-top:4px;font-size:13px}
+.row{display:flex;justify-content:space-between;gap:10px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mu,small{color:var(--mu)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--ln);text-align:left}
+td.n,th:last-child{text-align:right;white-space:nowrap}
+tr.b td{font-weight:700}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--cd);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;padding:14px 4px;background:none;border:0;color:var(--mu);font-size:14px}
+nav button.on{color:var(--ac);font-weight:700;box-shadow:inset 0 2px 0 var(--ac)}
+</style></head><body>
+<header><small>Pembukuan</small><input id="nama" onchange="S.nama=this.value;save()"></header>
+<main id="v"></main>
+<nav>
+<button data-t="jurnal">Transaksi</button><button data-t="akun">Akun</button><button data-t="laporan">Laporan</button><button data-t="excel">Excel</button>
+</nav>
+<script>
+const KEY='akuntansi_v1',TIPE={A:'Aset',K:'Kewajiban',M:'Modal',P:'Pendapatan',B:'Beban'};
+const DEF=[['1-101','Kas','A'],['1-102','Bank','A'],['1-103','Piutang Usaha','A'],['1-104','Persediaan','A'],['1-201','Peralatan','A'],['2-101','Utang Usaha','K'],['2-102','Utang Bank','K'],['3-101','Modal Pemilik','M'],['3-102','Prive','M'],['4-101','Pendapatan Penjualan','P'],['4-102','Pendapatan Jasa','P'],['5-101','Harga Pokok Penjualan','B'],['5-102','Beban Gaji','B'],['5-103','Beban Sewa','B'],['5-104','Beban Listrik dan Air','B'],['5-105','Beban Lain-lain','B']];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rp=n=>new Intl.NumberFormat('id-ID').format(Math.round(n));
+const hari=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.akun)return s}catch(e){}return{nama:'Nama Perusahaan',akun:DEF.map(([k,n,t])=>({k,n,t})),jurnal:[]}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+let S=load(),tab='jurnal',lap='ns',bbA='1-101',PR={f:'',t:''};
+const nm=k=>{const a=S.akun.find(x=>x.k===k);return a?a.k+' '+a.n:k};
+const opts=sel=>S.akun.map(a=>`<option value="${esc(a.k)}"${a.k===sel?' selected':''}>${esc(a.k)} ${esc(a.n)}</option>`).join('');
+const sal=(a,f,t)=>{let d=0,c=0;S.jurnal.forEach(j=>{if((f&&j.tgl<f)||(t&&j.tgl>t))return;if(j.d===a.k)d+=j.jml;if(j.c===a.k)c+=j.jml});return{n:d-c,s:'AB'.includes(a.t)?d-c:c-d}};
+const grp=(t,f,to)=>S.akun.filter(a=>a.t===t).map(a=>[a.k+' '+a.n,sal(a,f,to).s]).filter(r=>r[1]);
+const sum=r=>r.reduce((x,y)=>x+y[1],0);
+
+function R(){document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));$('#v').innerHTML=({jurnal:vJ,akun:vA,laporan:vL,excel:vX})[tab]()}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{tab=b.dataset.t;R()});
+
+function vJ(){const l=[...S.jurnal].sort((a,b)=>b.tgl.localeCompare(a.tgl)||b.id-a.id);
+return `<div class="card"><h3>Catat transaksi</h3>
+<label>Tanggal<input id="jt" type="date" value="${hari()}"></label>
+<label>Keterangan<input id="jk" placeholder="Contoh: Penjualan tunai"></label>
+<label>Akun didebit<select id="jd">${opts('1-101')}</select></label>
+<label>Akun dikredit<select id="jc">${opts('4-101')}</select></label>
+<label>Jumlah (Rp)<input id="jj" type="number" inputmode="decimal" min="0"></label>
+<button class="btn" onclick="addJ()">Simpan transaksi</button></div>
+${l.map(j=>`<div class="card"><div class="row"><b>${esc(j.ket)||'(tanpa keterangan)'}</b><span>${rp(j.jml)}</span></div><small>${esc(j.tgl)} | Debit ${esc(nm(j.d))} | Kredit ${esc(nm(j.c))}</small><br><button class="del" onclick="delJ(${j.id})">Hapus</button></div>`).join('')||'<p class="mu">Belum ada transaksi. Isi formulir di atas untuk mulai.</p>'}`}
+function addJ(){const j={id:Date.now(),tgl:$('#jt').value,ket:$('#jk').value.trim(),d:$('#jd').value,c:$('#jc').value,jml:parseFloat($('#jj').value)};
+if(!j.tgl||!(j.jml>0))return alert('Isi tanggal dan jumlah (harus lebih dari 0).');
+if(j.d===j.c)return alert('Akun debit dan kredit tidak boleh sama.');
+S.jurnal.push(j);save();R()}
+function delJ(id){if(confirm('Hapus transaksi ini?')){S.jurnal=S.jurnal.filter(j=>j.id!==id);save();R()}}
+
+function vA(){return `<div class="card"><h3>Tambah akun</h3><label>Kode<input id="ak"></label><label>Nama akun<input id="an"></label>
+<label>Tipe<select id="at">${Object.entries(TIPE).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label>
+<button class="btn" onclick="addA()">Simpan akun</button></div>
+${S.akun.map(a=>`<div class="card"><div class="row"><b>${esc(a.k)} ${esc(a.n)}</b><span>${rp(sal(a).s)}</span></div><small>${TIPE[a.t]}</small><br><button class="del" onclick="delA('${esc(a.k)}')">Hapus</button></div>`).join('')}`}
+function addA(){const k=$('#ak').value.trim(),n=$('#an').value.trim();
+if(!k||!n)return alert('Kode dan nama akun wajib diisi.');
+if(S.akun.some(a=>a.k===k))return alert('Kode akun sudah dipakai.');
+S.akun.push({k,n,t:$('#at').value});S.akun.sort((a,b)=>a.k.localeCompare(b.k));save();R()}
+function delA(k){if(S.jurnal.some(j=>j.d===k||j.c===k))return alert('Akun sudah dipakai di transaksi, tidak bisa dihapus.');
+if(confirm('Hapus akun ini?')){S.akun=S.akun.filter(a=>a.k!==k);save();R()}}
+
+function lapor(w){const{f,t}=PR;
+if(w==='ns'){let td=0,tc=0;const r=[['Kode','Akun','Debit','Kredit']];S.akun.forEach(a=>{const n=sal(a,'',t).n;if(!n)return;r.push([a.k,a.n,n>0?n:null,n<0?-n:null]);if(n>0)td+=n;else tc-=n});r.push(['','Total',td,tc]);return{j:'Neraca Saldo',r}}
+if(w==='lr'){const p=grp('P',f,t),b=grp('B',f,t),tp=sum(p),tb=sum(b);return{j:'Laba Rugi',r:[['Keterangan','Rp'],['PENDAPATAN',null],...p,['Total Pendapatan',tp],['BEBAN',null],...b,['Total Beban',tb],['LABA (RUGI) BERSIH',tp-tb]]}}
+if(w==='nr'){const a=grp('A','',t),k=grp('K','',t),m=grp('M','',t),lb=sum(grp('P','',t))-sum(grp('B','',t)),tm=sum(m)+lb;return{j:'Neraca',r:[['Keterangan','Rp'],['ASET',null],...a,['Total Aset',sum(a)],['KEWAJIBAN',null],...k,['Total Kewajiban',sum(k)],['MODAL',null],...m,['Laba (Rugi) Berjalan',lb],['Total Modal',tm],['Total Kewajiban + Modal',sum(k)+tm]]}}
+const a=S.akun.find(x=>x.k===bbA)||S.akun[0],sg='AB'.includes(a.t)?1:-1;let run=0;const r=[['Tanggal','Keterangan','Debit','Kredit','Saldo']];
+S.jurnal.filter(j=>(j.d===a.k||j.c===a.k)&&(!f||j.tgl>=f)&&(!t||j.tgl<=t)).sort((x,y)=>x.tgl.localeCompare(y.tgl)||x.id-y.id).forEach(j=>{const d=j.d===a.k?j.jml:null,c=j.c===a.k?j.jml:null;run+=sg*((d||0)-(c||0));r.push([j.tgl,j.ket,d,c,run])});
+return{j:'Buku Besar '+a.n,r}}
+function tbl(r){return `<table>${r.map((x,i)=>{const b=i&&/^(Total|LABA|ASET$|KEWAJIBAN$|MODAL$|PENDAPATAN$|BEBAN$)/.test(x[0]||x[1]||'');
+return `<tr${b?' class="b"':''}>${x.map(c=>i&&typeof c==='number'?`<td class="n">${rp(c)}</td>`:`<${i?'td':'th'}>${esc(c)}</${i?'td':'th'}>`).join('')}</tr>`}).join('')}</table>`}
+function vL(){const ops=[['ns','Neraca Saldo'],['lr','Laba Rugi'],['nr','Neraca'],['bb','Buku Besar']],x=lapor(lap);
+return `<div class="card"><label>Jenis laporan<select onchange="lap=this.value;R()">${ops.map(([k,v])=>`<option value="${k}"${k===lap?' selected':''}>${v}</option>`).join('')}</select></label>
+${lap==='bb'?`<label>Akun<select onchange="bbA=this.value;R()">${opts(bbA)}</select></label>`:''}
+<div class="two"><label>Dari tanggal<input type="date" value="${PR.f}" onchange="PR.f=this.value;R()"></label><label>Sampai tanggal<input type="date" value="${PR.t}" onchange="PR.t=this.value;R()"></label></div>
+<small>Neraca dan Neraca Saldo dihitung kumulatif sampai tanggal akhir.</small></div>
+<div class="card" style="overflow-x:auto"><h3>${esc(x.j)}</h3>${tbl(x.r)}</div>`}
+
+function vX(){return `<div class="card"><h3>Ekspor ke Excel</h3><p class="mu">Satu file .xlsx berisi sheet Jurnal, Akun, Neraca Saldo, Laba Rugi, dan Neraca. Laporan mengikuti rentang tanggal di tab Laporan.</p><button class="btn" onclick="expX()">Ekspor .xlsx</button></div>
+<div class="card"><h3>Impor dari Excel</h3><p class="mu">Pakai file hasil ekspor. Sheet Jurnal dengan kolom Tanggal, Keterangan, Kode Debit, Kode Kredit, Jumlah. Kode akun harus sudah ada. Data ditambahkan ke transaksi yang sudah ada.</p><input type="file" accept=".xlsx,.xls,.csv" onchange="impX(this.files[0])"></div>
+<div class="card"><p class="mu">Data tersimpan di perangkat ini. Ekspor secara berkala sebagai cadangan.</p></div>`}
+async function simpan(wb,nama){const C=window.Capacitor,Pl=C&&C.Plugins;
+if(C&&C.isNativePlatform&&C.isNativePlatform()&&Pl.Filesystem&&Pl.Share){try{const r=await Pl.Filesystem.writeFile({path:nama,data:XLSX.write(wb,{bookType:'xlsx',type:'base64'}),directory:'CACHE'});await Pl.Share.share({title:nama,url:r.uri})}catch(e){alert('Gagal menyimpan: '+e.message)}}
+else XLSX.writeFile(wb,nama)}
+async function expX(){if(!window.XLSX)return alert('Library Excel belum termuat. Sambungkan internet atau pasang xlsx.full.min.js.');
+const wb=XLSX.utils.book_new(),add=(n,r)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(r),n);
+add('Jurnal',[['Tanggal','Keterangan','Kode Debit','Kode Kredit','Jumlah'],...S.jurnal.map(j=>[j.tgl,j.ket,j.d,j.c,j.jml])]);
+add('Akun',[['Kode','Nama','Tipe'],...S.akun.map(a=>[a.k,a.n,TIPE[a.t]])]);
+['ns','lr','nr'].forEach(w=>{const x=lapor(w);add(x.j,x.r)});
+await simpan(wb,'Akuntansi_'+(S.nama||'Perusahaan').replace(/\W+/g,'_')+'.xlsx')}
+const dtn=n=>{const d=XLSX.SSF.parse_date_code(n);return d.y+'-'+String(d.m).padStart(2,'0')+'-'+String(d.d).padStart(2,'0')};
+async function impX(f){if(!f)return;if(!window.XLSX)return alert('Library Excel belum termuat.');
+try{const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),ws=wb.Sheets['Jurnal']||wb.Sheets[wb.SheetNames[0]];let ok=0,skip=0;
+XLSX.utils.sheet_to_json(ws).forEach((r,i)=>{const t=r['Tanggal'],tgl=typeof t==='number'?dtn(t):String(t||'').slice(0,10),d=String(r['Kode Debit']||'').trim(),c=String(r['Kode Kredit']||'').trim(),jml=Number(r['Jumlah']);
+if(/^\d{4}-\d{2}-\d{2}$/.test(tgl)&&jml>0&&d!==c&&S.akun.some(a=>a.k===d)&&S.akun.some(a=>a.k===c)){S.jurnal.push({id:Date.now()+i,tgl,ket:String(r['Keterangan']||''),d,c,jml});ok++}else skip++});
+save();R();alert(ok+' transaksi diimpor, '+skip+' baris dilewati.')}catch(e){alert('File tidak bisa dibaca. Pastikan formatnya .xlsx hasil ekspor.')}}
+$('#nama').value=S.nama;R();
+</script></body></html>
